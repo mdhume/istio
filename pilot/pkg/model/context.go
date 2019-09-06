@@ -591,6 +591,9 @@ const (
 	// NodeMetadataExchangeKeys specifies a list of metadata keys that should be used for Node Metadata Exchange.
 	// The list is comma-separated.
 	NodeMetadataExchangeKeys = "EXCHANGE_KEYS"
+
+	// NodeMetadataDnsCert specifies the absolute path to a directory containing an additional non citadel issued X509 certificate with DNS SANs
+	NodeMetadataDNSCert = "DNS_CERT"
 )
 
 // TrafficInterceptionMode indicates how traffic to/from the workload is captured and

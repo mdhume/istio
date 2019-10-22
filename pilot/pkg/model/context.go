@@ -278,6 +278,8 @@ type NodeMetadata struct {
 	TLSClientKey string `json:"TLS_CLIENT_KEY,omitempty"`
 	// TLSClientRootCert is the absolute path to client root cert file
 	TLSClientRootCert string `json:"TLS_CLIENT_ROOT_CERT,omitempty"`
+	// DNSCert is the absolute path to a directory containing an additional non citadel issued X509 certificate with DNS SANs
+	DNSCert string `json:"DNS_CERT,omitempty"`
 
 	// SdsTokenPath specifies the path of the SDS token used by the Envoy proxy.
 	// If not set, Pilot uses the default SDS token path.
@@ -704,6 +706,9 @@ const (
 
 	// NodeMetadataTLSClientRootCert is the absolute path to client root cert file
 	NodeMetadataTLSClientRootCert = "TLS_CLIENT_ROOT_CERT"
+
+	// NodeMetadataDnsCert specifies the absolute path to a directory containing an additional non citadel issued X509 certificate with DNS SANs
+	NodeMetadataDNSCert = "DNS_CERT"
 )
 
 // TrafficInterceptionMode indicates how traffic to/from the workload is captured and

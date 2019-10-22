@@ -17,6 +17,7 @@ package v1alpha1
 import (
 	"crypto/sha1"
 	"fmt"
+	"path"
 
 	auth "github.com/envoyproxy/go-control-plane/envoy/api/v2/auth"
 	core "github.com/envoyproxy/go-control-plane/envoy/api/v2/core"
@@ -28,6 +29,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/empty"
 	structpb "github.com/golang/protobuf/ptypes/struct"
+	"github.com/golang/protobuf/ptypes/wrappers"
 
 	authn_v1alpha1 "istio.io/api/authentication/v1alpha1"
 	"istio.io/pkg/log"
@@ -39,7 +41,7 @@ import (
 	"istio.io/istio/pilot/pkg/security/authn"
 	authn_model "istio.io/istio/pilot/pkg/security/model"
 	"istio.io/istio/pkg/config/constants"
-	protovalue "istio.io/istio/pkg/proto"
+	booltypes "istio.io/istio/pkg/proto"
 	authn_filter_policy "istio.io/istio/security/proto/authentication/v1alpha1"
 	authn_filter "istio.io/istio/security/proto/envoy/config/filter/http/authn/v2alpha1"
 	istio_jwt "istio.io/istio/security/proto/envoy/config/filter/http/jwt_auth/v2alpha1"
@@ -278,6 +280,29 @@ func convertPolicyToAuthNFilterConfig(policy *authn_v1alpha1.Policy, proxyType m
 	return filterConfig
 }
 
+// setDownstreamTlsContext sets the downstream tls context configuration based on the information passed to it
+func setDownstreamTlsContext(tls *auth.DownstreamTlsContext, tlsServerRootCert string, tlsServerCertChain string, tlsServerKey string, alpnProtocols []string, requireClientCerts *wrappers.BoolValue, subjectAltNames []string) {
+	tls.CommonTlsContext = &auth.CommonTlsContext{
+		AlpnProtocols: alpnProtocols,
+		TlsCertificates: []*auth.TlsCertificate{
+			{
+				CertificateChain: &core.DataSource{
+					Specifier: &core.DataSource_Filename{
+						Filename: tlsServerCertChain,
+					},
+				},
+				PrivateKey: &core.DataSource{
+					Specifier: &core.DataSource_Filename{
+						Filename: tlsServerKey,
+					},
+				},
+			},
+		},
+		ValidationContextType: authn_model.ConstructValidationContext(tlsServerRootCert, subjectAltNames),
+	}
+	tls.RequireClientCertificate = requireClientCerts
+}
+
 // Implemenation of authn.PolicyApplier
 type v1alpha1PolicyApplier struct {
 	policy *authn_v1alpha1.Policy
@@ -324,44 +349,36 @@ func (a v1alpha1PolicyApplier) InboundFilterChain(sdsUdsPath string, meta *model
 		ApplicationProtocols: util.ALPNInMesh,
 	}
 	tls := &auth.DownstreamTlsContext{
-		CommonTlsContext: &auth.CommonTlsContext{
-			// Note that in the PERMISSIVE mode, we match filter chain on "istio" ALPN,
-			// which is used to differentiate between service mesh and legacy traffic.
-			//
-			// Client sidecar outbound cluster's TLSContext.ALPN must include "istio".
-			//
-			// Server sidecar filter chain's FilterChainMatch.ApplicationProtocols must
-			// include "istio" for the secure traffic, but its TLSContext.ALPN must not
-			// include "istio", which would interfere with negotiation of the underlying
-			// protocol, e.g. HTTP/2.
-			AlpnProtocols: util.ALPNHttp,
-		},
-		RequireClientCertificate: protovalue.BoolTrue,
+		CommonTlsContext: &auth.CommonTlsContext{},
 	}
+
 	if sdsUdsPath == "" {
-		base := meta.SdsBase + constants.AuthCertsPath
-		tlsServerRootCert := model.GetOrDefault(meta.TLSServerRootCert, base+constants.RootCertFilename)
+		base := path.Join(meta.SdsBase, constants.AuthCertsPath)
+		tlsServerRootCert := model.GetOrDefault(meta.TLSServerRootCert, path.Join(base, constants.RootCertFilename))
 
-		tls.CommonTlsContext.ValidationContextType = authn_model.ConstructValidationContext(tlsServerRootCert, []string{} /*subjectAltNames*/)
+		// tls.CommonTlsContext.ValidationContextType = authn_model.ConstructValidationContext(tlsServerRootCert, []string{} /*subjectAltNames*/)
 
-		tlsServerCertChain := model.GetOrDefault(meta.TLSServerCertChain, base+constants.CertChainFilename)
-		tlsServerKey := model.GetOrDefault(meta.TLSServerKey, base+constants.KeyFilename)
+		tlsServerCertChain := model.GetOrDefault(meta.TLSServerCertChain, path.Join(base, constants.CertChainFilename))
+		tlsServerKey := model.GetOrDefault(meta.TLSServerKey, path.Join(base, constants.KeyFilename))
 
-		tls.CommonTlsContext.TlsCertificates = []*auth.TlsCertificate{
-			{
-				CertificateChain: &core.DataSource{
-					Specifier: &core.DataSource_Filename{
-						Filename: tlsServerCertChain,
-					},
-				},
-				PrivateKey: &core.DataSource{
-					Specifier: &core.DataSource_Filename{
-						Filename: tlsServerKey,
-					},
-				},
-			},
-		}
+		setDownstreamTlsContext(tls, tlsServerRootCert, tlsServerCertChain, tlsServerKey, util.ALPNHttp, booltypes.BoolTrue, []string{})
+		// tls.CommonTlsContext.TlsCertificates = []*auth.TlsCertificate{
+		// 	{
+		// 		CertificateChain: &core.DataSource{
+		// 			Specifier: &core.DataSource_Filename{
+		// 				Filename: tlsServerCertChain,
+		// 			},
+		// 		},
+		// 		PrivateKey: &core.DataSource{
+		// 			Specifier: &core.DataSource_Filename{
+		// 				Filename: tlsServerKey,
+		// 			},
+		// 		},
+		// 	},
+		// }
 	} else {
+		tls.RequireClientCertificate = booltypes.BoolTrue
+		tls.CommonTlsContext.AlpnProtocols = util.ALPNHttp
 		tls.CommonTlsContext.TlsCertificateSdsSecretConfigs = []*auth.SdsSecretConfig{
 			authn_model.ConstructSdsSecretConfig(authn_model.SDSDefaultResourceName, sdsUdsPath, meta),
 		}
@@ -387,7 +404,7 @@ func (a v1alpha1PolicyApplier) InboundFilterChain(sdsUdsPath string, meta *model
 	}
 	if mtls.GetMode() == authn_v1alpha1.MutualTls_PERMISSIVE {
 		log.Debug("Allow both, ALPN istio and legacy traffic")
-		return []plugin.FilterChain{
+		permissiveModeFilterChains := []plugin.FilterChain{
 			{
 				FilterChainMatch: alpnIstioMatch,
 				TLSContext:       tls,
@@ -402,6 +419,33 @@ func (a v1alpha1PolicyApplier) InboundFilterChain(sdsUdsPath string, meta *model
 				FilterChainMatch: &ldsv2.FilterChainMatch{},
 			},
 		}
+		if meta.DNSCert != "" {
+			log.Infof("value of dns cert is %s", meta.DNSCert)
+			log.Info("Metadata contains DNS_CERT, adding additional filter chain with transport_protocols as filterchainmatch")
+			certsPath := meta.DNSCert
+			dnsSANTLSContext := &auth.DownstreamTlsContext{}
+
+			tlsServerRootCert := path.Join(certsPath, constants.RootCertFilename)
+			tlsServerCertChain := path.Join(certsPath, constants.CertChainFilename)
+			tlsServerKey := path.Join(certsPath, constants.KeyFilename)
+
+			setDownstreamTlsContext(dnsSANTLSContext, tlsServerRootCert, tlsServerCertChain, tlsServerKey, util.ALPNHttp, booltypes.BoolTrue, []string{})
+
+			dnsSANCertfilterChain := plugin.FilterChain{
+				FilterChainMatch: &ldsv2.FilterChainMatch{
+					TransportProtocol: "tls",
+				},
+				TLSContext: dnsSANTLSContext,
+				ListenerFilters: []*ldsv2.ListenerFilter{
+					{
+						Name:       xdsutil.TlsInspector,
+						ConfigType: &ldsv2.ListenerFilter_Config{Config: &structpb.Struct{}},
+					},
+				},
+			}
+			permissiveModeFilterChains = append(permissiveModeFilterChains, dnsSANCertfilterChain)
+		}
+		return permissiveModeFilterChains
 	}
 	return nil
 }

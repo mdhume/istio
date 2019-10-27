@@ -545,7 +545,7 @@ func (configgen *ConfigGeneratorImpl) buildSidecarInboundListenerForPortOrUDS(no
 	}
 	// Construct the default filter chain.
 	if len(allChains) != 0 {
-		log.Debugf("Multiple plugins setup inbound filter chains for listener %s, FilterChainMatch may not work as intended!",
+		log.Infof("Multiple plugins setup inbound filter chains for listener %s, FilterChainMatch may not work as intended!",
 			listenerMapKey)
 	} else {
 		// add one empty entry to the list so we generate a default listener below

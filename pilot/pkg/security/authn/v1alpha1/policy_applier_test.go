@@ -765,6 +765,35 @@ func TestOnInboundFilterChains(t *testing.T) {
 		},
 		RequireClientCertificate: proto.BoolTrue,
 	}
+	dnsSANTLSContext := &auth.DownstreamTlsContext{
+		CommonTlsContext: &auth.CommonTlsContext{
+			TlsCertificates: []*auth.TlsCertificate{
+				{
+					CertificateChain: &core.DataSource{
+						Specifier: &core.DataSource_Filename{
+							Filename: "/etc/certs/custom/cert-chain.pem",
+						},
+					},
+					PrivateKey: &core.DataSource{
+						Specifier: &core.DataSource_Filename{
+							Filename: "/etc/certs/custom/key.pem",
+						},
+					},
+				},
+			},
+			ValidationContextType: &auth.CommonTlsContext_ValidationContext{
+				ValidationContext: &auth.CertificateValidationContext{
+					TrustedCa: &core.DataSource{
+						Specifier: &core.DataSource_Filename{
+							Filename: "/etc/certs/custom/root-cert.pem",
+						},
+					},
+				},
+			},
+			AlpnProtocols: []string{"h2", "http/1.1"},
+		},
+		RequireClientCertificate: proto.BoolTrue,
+	}
 	cases := []struct {
 		name       string
 		in         *authn.Policy
@@ -941,6 +970,53 @@ func TestOnInboundFilterChains(t *testing.T) {
 						RequireClientCertificate: proto.BoolTrue,
 					},
 				},
+			},
+		},
+		{
+			name: "permissive mTLS using certificate with DNS SANs",
+			in: &authn.Policy{
+				Peers: []*authn.PeerAuthenticationMethod{
+					{
+						Params: &authn.PeerAuthenticationMethod_Mtls{
+							Mtls: &authn.MutualTls{
+								Mode: authn.MutualTls_PERMISSIVE,
+							},
+						},
+					},
+				},
+			},
+			// Three filter chains, one for mtls traffic from istio clients, one for mtls traffic from non-istio clients, one for plain text traffic.
+			expected: []plugin.FilterChain{
+				{
+					TLSContext: tlsContext,
+					FilterChainMatch: &listener.FilterChainMatch{
+						ApplicationProtocols: []string{"istio"},
+					},
+					ListenerFilters: []*listener.ListenerFilter{
+						{
+							Name:       "envoy.listener.tls_inspector",
+							ConfigType: &listener.ListenerFilter_Config{&types.Struct{}},
+						},
+					},
+				},
+				{
+					FilterChainMatch: &listener.FilterChainMatch{},
+				},
+				{
+					TLSContext: dnsSANTLSContext,
+					FilterChainMatch: &listener.FilterChainMatch{
+						TransportProtocol: "tls",
+					},
+					ListenerFilters: []*listener.ListenerFilter{
+						{
+							Name:       "envoy.listener.tls_inspector",
+							ConfigType: &listener.ListenerFilter_Config{&types.Struct{}},
+						},
+					},
+				},
+			},
+			meta: map[string]string{
+				model.NodeMetadataDNSCert: "/etc/certs/custom",
 			},
 		},
 	}

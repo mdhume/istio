@@ -21,6 +21,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"path"
 	"strings"
 	"sync"
 	"text/template"
@@ -44,6 +45,7 @@ import (
 	"istio.io/istio/pilot/pkg/proxy"
 	envoyDiscovery "istio.io/istio/pilot/pkg/proxy/envoy"
 	"istio.io/istio/pilot/pkg/serviceregistry"
+	"istio.io/istio/pkg/bootstrap"
 	"istio.io/istio/pkg/bootstrap/option"
 	"istio.io/istio/pkg/cmd"
 	"istio.io/istio/pkg/config/constants"
@@ -57,13 +59,17 @@ import (
 const trustworthyJWTPath = "/var/run/secrets/tokens/istio-token"
 
 var (
-	role          = &model.Proxy{}
-	proxyIP       string
-	registry      serviceregistry.ServiceRegistry
-	trustDomain   string
-	pilotIdentity string
-	mixerIdentity string
-	statusPort    uint16
+	role               = &model.Proxy{}
+	proxyIP            string
+	registry           serviceregistry.ServiceRegistry
+	trustDomain        string
+	pilotIdentity      string
+	mixerIdentity      string
+	statusPort         uint16
+	applicationPorts   []string
+	dnsServerCertChain string
+	dnsServerCertKey   string
+	dnsServerRootCert  string
 
 	// proxy config flags (named identically)
 	configPath               string
@@ -200,6 +206,13 @@ var (
 			tlsCertsToWatch = []string{
 				tlsServerCertChain, tlsServerKey, tlsServerRootCert,
 				tlsClientCertChain, tlsClientKey, tlsClientRootCert,
+			}
+			dnsCertPath := env.RegisterStringVar(bootstrap.IstioMetaPrefix+model.NodeMetadataDNSCert, "", "").Get()
+			if dnsCertPath != "" {
+				dnsServerCertChain = path.Join(dnsCertPath, constants.CertChainFilename)
+				dnsServerCertKey = path.Join(dnsCertPath, constants.KeyFilename)
+				dnsServerRootCert = path.Join(dnsCertPath, constants.RootCertFilename)
+				tlsCertsToWatch = append(tlsCertsToWatch, dnsServerCertChain, dnsServerCertKey, dnsServerRootCert)
 			}
 
 			proxyConfig := mesh.DefaultProxyConfig()

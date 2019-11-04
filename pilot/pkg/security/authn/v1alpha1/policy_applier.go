@@ -356,26 +356,10 @@ func (a v1alpha1PolicyApplier) InboundFilterChain(sdsUdsPath string, meta *model
 		base := path.Join(meta.SdsBase, constants.AuthCertsPath)
 		tlsServerRootCert := model.GetOrDefault(meta.TLSServerRootCert, path.Join(base, constants.RootCertFilename))
 
-		// tls.CommonTlsContext.ValidationContextType = authn_model.ConstructValidationContext(tlsServerRootCert, []string{} /*subjectAltNames*/)
-
 		tlsServerCertChain := model.GetOrDefault(meta.TLSServerCertChain, path.Join(base, constants.CertChainFilename))
 		tlsServerKey := model.GetOrDefault(meta.TLSServerKey, path.Join(base, constants.KeyFilename))
 
 		setDownstreamTlsContext(tls, tlsServerRootCert, tlsServerCertChain, tlsServerKey, util.ALPNHttp, booltypes.BoolTrue, []string{})
-		// tls.CommonTlsContext.TlsCertificates = []*auth.TlsCertificate{
-		// 	{
-		// 		CertificateChain: &core.DataSource{
-		// 			Specifier: &core.DataSource_Filename{
-		// 				Filename: tlsServerCertChain,
-		// 			},
-		// 		},
-		// 		PrivateKey: &core.DataSource{
-		// 			Specifier: &core.DataSource_Filename{
-		// 				Filename: tlsServerKey,
-		// 			},
-		// 		},
-		// 	},
-		// }
 	} else {
 		tls.RequireClientCertificate = booltypes.BoolTrue
 		tls.CommonTlsContext.AlpnProtocols = util.ALPNHttp

@@ -23,6 +23,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -46,6 +47,7 @@ import (
 	"istio.io/istio/pilot/pkg/proxy"
 	"istio.io/istio/pilot/pkg/proxy/envoy"
 	"istio.io/istio/pilot/pkg/serviceregistry"
+	"istio.io/istio/pkg/bootstrap"
 	"istio.io/istio/pkg/cmd"
 	"istio.io/istio/pkg/config/constants"
 	"istio.io/istio/pkg/config/mesh"
@@ -57,11 +59,14 @@ import (
 const trustworthyJWTPath = "/var/run/secrets/tokens/istio-token"
 
 var (
-	role             = &model.Proxy{Metadata: map[string]string{}}
-	proxyIP          string
-	registry         serviceregistry.ServiceRegistry
-	statusPort       uint16
-	applicationPorts []string
+	role               = &model.Proxy{Metadata: map[string]string{}}
+	proxyIP            string
+	registry           serviceregistry.ServiceRegistry
+	statusPort         uint16
+	applicationPorts   []string
+	dnsServerCertChain string
+	dnsServerCertKey   string
+	dnsServerRootCert  string
 
 	// proxy config flags (named identically)
 	configPath                 string
@@ -183,6 +188,15 @@ var (
 				tlsServerCertChain, tlsServerKey, tlsServerRootCert,
 				tlsClientCertChain, tlsClientKey, tlsClientRootCert,
 			}
+			dnsCertPath := env.RegisterStringVar(bootstrap.IstioMetaPrefix+model.NodeMetadataDNSCert, "", "").Get()
+			if dnsCertPath != "" {
+				fmt.Printf("dns cert path %s", dnsCertPath)
+				fmt.Println("dns cert found adding to cert watch")
+				dnsServerCertChain = path.Join(dnsCertPath, constants.CertChainFilename)
+				dnsServerCertKey = path.Join(dnsCertPath, constants.KeyFilename)
+				dnsServerRootCert = path.Join(dnsCertPath, constants.RootCertFilename)
+				tlsCertsToWatch = append(tlsCertsToWatch, dnsServerCertChain, dnsServerCertKey, dnsServerRootCert)
+			}
 
 			proxyConfig := mesh.DefaultProxyConfig()
 
@@ -300,12 +314,11 @@ var (
 
 			// dedupe cert paths so we don't set up 2 watchers for the same file:
 			tlsCertsToWatch = dedupeStrings(tlsCertsToWatch)
-
+			log.Infof("Monitored certs: %#v", tlsCertsToWatch)
 			// Since Envoy needs the file-mounted certs for mTLS, we wait for them to become available
 			// before starting it. Skip waiting cert if sds is enabled, otherwise it takes long time for
 			// pod to start.
 			if (controlPlaneAuthEnabled || rsTLSEnabled) && !sdsEnabled {
-				log.Infof("Monitored certs: %#v", tlsCertsToWatch)
 				for _, cert := range tlsCertsToWatch {
 					waitForFile(cert, 2*time.Minute)
 				}

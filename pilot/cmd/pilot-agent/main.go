@@ -223,9 +223,9 @@ var (
 			}
 			dnsCertPath := env.RegisterStringVar(bootstrap.IstioMetaPrefix+model.NodeMetadataDNSCert, "", "").Get()
 			if dnsCertPath != "" {
-				dnsServerCertChain = path.Join(dnsCertPath, constants.DefaultCertChain)
-				dnsServerCertKey = path.Join(dnsCertPath, constants.DefaultKey)
-				dnsServerRootCert = path.Join(dnsCertPath, constants.DefaultRootCert)
+				dnsServerCertChain = path.Join(dnsCertPath, constants.CertChainFilename)
+				dnsServerCertKey = path.Join(dnsCertPath, constants.KeyFilename)
+				dnsServerRootCert = path.Join(dnsCertPath, constants.RootCertFilename)
 				tlsCertsToWatch = append(tlsCertsToWatch, dnsServerCertChain, dnsServerCertKey, dnsServerRootCert)
 			}
 

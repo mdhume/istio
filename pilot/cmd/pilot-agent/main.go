@@ -21,11 +21,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
-<<<<<<< HEAD
-=======
 	"path"
-	"strconv"
->>>>>>> adding cert watch for dns certs
 	"strings"
 	"sync"
 	"text/template"
@@ -63,15 +59,6 @@ import (
 const trustworthyJWTPath = "/var/run/secrets/tokens/istio-token"
 
 var (
-<<<<<<< HEAD
-	role          = &model.Proxy{}
-	proxyIP       string
-	registry      serviceregistry.ServiceRegistry
-	trustDomain   string
-	pilotIdentity string
-	mixerIdentity string
-	statusPort    uint16
-=======
 	role               = &model.Proxy{}
 	proxyIP            string
 	registry           serviceregistry.ServiceRegistry
@@ -83,7 +70,6 @@ var (
 	dnsServerCertChain string
 	dnsServerCertKey   string
 	dnsServerRootCert  string
->>>>>>> adding cert watch for dns certs
 
 	// proxy config flags (named identically)
 	configPath               string
